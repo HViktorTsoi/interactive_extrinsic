@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多传感器外参可视化</title>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #f5f5f5;
+        }
+        #canvas-container {
+            flex: 1;
+            overflow: hidden;
+            background-color: #f0f0f0;
+        }
+        #controls {
+            padding: 15px;
+            background-color: #fff;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            max-height: 40vh;
+        }
+        .control-group {
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        .control-group h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        #axis1-controls {
+            background-color: #e6f7ff;
+            border-left: 4px solid #1890ff;
+        }
+        #axis2-controls {
+            background-color: #f6ffed;
+            border-left: 4px solid #52c41a;
+        }
+        #global-controls {
+            background-color: #fff7e6;
+            border-left: 4px solid #fa8c16;
+            margin-bottom: 15px;
+        }
+        #matrix-display {
+            background-color: #f9f0ff;
+            border-left: 4px solid #722ed1;
+            margin-bottom: 15px;
+        }
+        .slider-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 10px;
+        }
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+        }
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        .slider-value {
+            font-weight: bold;
+            color: #1890ff;
+        }
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        .label-input {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        .label-input label {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .label-input input[type="text"] {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .tooltip {
+            font-size: 12px;
+            color: #888;
+            margin-top: 4px;
+            font-style: italic;
+        }
+        .matrix-container {
+            margin-bottom: 15px;
+        }
+        .matrix-container h4 {
+            margin-top: 0;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        .matrix-display {
+            width: 100%;
+            min-height: 120px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            padding: 10px;
+            background-color: #f8f8f8;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        .matrix-container .copy-btn {
+            margin-top: 5px;
+            padding: 5px 10px;
+            background-color: #722ed1;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .matrix-container .copy-btn:hover {
+            background-color: #5d1db0;
+        }
+        @media (max-width: 768px) {
+            .slider-group {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div id="controls">
+        <div class="control-group" id="global-controls">
+            <h3>相机控制</h3>
+            <div class="slider-container">
+                <div class="slider-label">
+                    <span>相机旋转角度:</span>
+                    <span class="slider-value" id="camera-angle-value">0.0</span>
+                </div>
+                <input type="range" id="camera-angle" min="0" max="6.28" step="0.01" value="0.1">
+                <div class="tooltip">双击滑块可重置为0</div>
+            </div>
+        </div>
+
+        <div class="control-group" id="axis1-controls">
+            <h3>坐标轴 1 控制 (蓝色)</h3>
+            <div class="label-input">
+                <label for="axis1-label">坐标轴标签:</label>
+                <input type="text" id="axis1-label" value="LiDAR" placeholder="输入坐标轴标签">
+            </div>
+            <div class="slider-group">
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>X位置:</span>
+                        <span class="slider-value" id="axis1-x-value">0.0</span>
+                    </div>
+                    <input type="range" id="axis1-x" min="-5" max="5" step="0.1" value="0">
+                    <div class="tooltip">双击滑块可重置为0</div>
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Y位置:</span>
+                        <span class="slider-value" id="axis1-y-value">0.0</span>
+                    </div>
+                    <input type="range" id="axis1-y" min="-5" max="5" step="0.1" value="0">
+                    <div class="tooltip">双击滑块可重置为0</div>
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Z位置:</span>
+                        <span class="slider-value" id="axis1-z-value">0.0</span>
+                    </div>
+                    <input type="range" id="axis1-z" min="-5" max="5" step="0.1" value="0">
+                    <div class="tooltip">双击滑块可重置为0</div>
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Roll (绕X轴):</span>
+                        <span class="slider-value" id="axis1-roll-value">0.0</span>
+                    </div>
+                    <input type="range" id="axis1-roll" min="-3.14" max="3.14" step="0.01" value="0">
+                    <div class="tooltip">双击滑块可重置为0</div>
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Pitch (绕Y轴):</span>
+                        <span class="slider-value" id="axis1-pitch-value">0.0</span>
+                    </div>
+                    <input type="range" id="axis1-pitch" min="-3.14" max="3.14" step="0.01" value="0">
+                    <div class="tooltip">双击滑块可重置为0</div>
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Yaw (绕Z轴):</span>
+                        <span class="slider-value" id="axis1-yaw-value">0.0</span>
+                    </div>
+                    <input type="range" id="axis1-yaw" min="-3.14" max="3.14" step="0.01" value="0">
+                    <div class="tooltip">双击滑块可重置为0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group" id="axis2-controls">
+            <h3>坐标轴 2 控制 (绿色)</h3>
+            <div class="label-input">
+                <label for="axis2-label">坐标轴标签:</label>
+                <input type="text" id="axis2-label" value="Camera" placeholder="输入坐标轴标签">
+            </div>
+            <div class="slider-group">
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>X位置:</span>
+                        <span class="slider-value" id="axis2-x-value">2.0</span>
+                    </div>
+                    <input type="range" id="axis2-x" min="-5" max="5" step="0.1" value="2">
+                    <div class="tooltip">双击滑块可重置为0</div>
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Y位置:</span>
+                        <span class="slider-value" id="axis2-y-value">0.0</span>
+                    </div>
+                    <input type="range" id="axis2-y" min="-5" max="5" step="0.1" value="0">
+                    <div class="tooltip">双击滑块可重置为0</div>
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Z位置:</span>
+                        <span class="slider-value" id="axis2-z-value">0.0</span>
+                    </div>
+                    <input type="range" id="axis2-z" min="-5" max="5" step="0.1" value="0">
+                    <div class="tooltip">双击滑块可重置为0</div>
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Roll (绕X轴):</span>
+                        <span class="slider-value" id="axis2-roll-value">0.0</span>
+                    </div>
+                    <input type="range" id="axis2-roll" min="-3.14" max="3.14" step="0.01" value="0">
+                    <div class="tooltip">双击滑块可重置为0</div>
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Pitch (绕Y轴):</span>
+                        <span class="slider-value" id="axis2-pitch-value">0.0</span>
+                    </div>
+                    <input type="range" id="axis2-pitch" min="-3.14" max="3.14" step="0.01" value="0">
+                    <div class="tooltip">双击滑块可重置为0</div>
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Yaw (绕Z轴):</span>
+                        <span class="slider-value" id="axis2-yaw-value">0.0</span>
+                    </div>
+                    <input type="range" id="axis2-yaw" min="-3.14" max="3.14" step="0.01" value="0">
+                    <div class="tooltip">双击滑块可重置为0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group" id="matrix-display">
+            <h3>相对变换矩阵 (Python列表格式)</h3>
+            <div class="matrix-container">
+                <h4 id="matrix1-to-2-title">Axis 1 到 Axis 2 的变换矩阵:</h4>
+                <pre id="axis1-to-axis2" class="matrix-display"></pre>
+                <button class="copy-btn" onclick="copyToClipboard('axis1-to-axis2')">复制到剪贴板</button>
+            </div>
+            <div class="matrix-container">
+                <h4 id="matrix2-to-1-title">Axis 2 到 Axis 1 的变换矩阵:</h4>
+                <pre id="axis2-to-axis1" class="matrix-display"></pre>
+                <button class="copy-btn" onclick="copyToClipboard('axis2-to-axis1')">复制到剪贴板</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化Three.js场景
+        let scene, camera, renderer;
+        let axis1Group, axis2Group;
+        let axis1, axis2;
+        let axis1Label, axis2Label;
+        let axisLength = 1;
+        let cameraAngle = 0;
+
+        // 用于存储当前坐标轴的位置和姿态
+        const axis1State = {
+            x: 0, y: 0, z: 0,
+            roll: 0, pitch: 0, yaw: 0,
+            label: "LiDAR"
+        };
+
+        const axis2State = {
+            x: 2, y: 0, z: 0,
+            roll: 0, pitch: 0, yaw: 0,
+            label: "Camera"
+        };
+
+        // 初始化3D场景
+        function init() {
+            // 创建场景
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f0f0);
+
+            // 创建相机
+            camera = new THREE.PerspectiveCamera(
+                75,
+                window.innerWidth / (window.innerHeight * 0.7),
+                0.1,
+                1000
+            );
+            camera.position.set(5, 5, 5);
+            camera.lookAt(0, 0, 0);
+
+            // 创建渲染器
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight * 0.7);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // 添加全局坐标轴作为参考（标准的右手坐标系）
+            const globalAxesHelper = new THREE.AxesHelper(3);
+            // 增加全局坐标轴的线宽
+            globalAxesHelper.material.linewidth = 2;
+            scene.add(globalAxesHelper);
+
+            // 添加网格平面 (标准的XZ平面)
+            const gridHelper = new THREE.GridHelper(1, 1);
+            gridHelper.rotation.x = -Math.PI / 2;
+            scene.add(gridHelper);
+
+            // 创建第一个可动态调整的坐标轴组
+            axis1Group = new THREE.Group();
+            scene.add(axis1Group);
+
+            // 创建第二个可动态调整的坐标轴组
+            axis2Group = new THREE.Group();
+            scene.add(axis2Group);
+
+            // 创建坐标轴（标准坐标系）
+            axis1 = createCustomAxes(axisLength, 0x0077ff);
+            axis1Group.add(axis1);
+
+            axis2 = createCustomAxes(axisLength, 0x00cc33);
+            axis2Group.position.set(2, 0, 0);
+            axis2Group.add(axis2);
+
+            // 添加文本标签
+            createTextLabels();
+
+            // 初始化控制器
+            setupControlListeners();
+
+            // 窗口大小变化时调整
+            window.addEventListener('resize', onWindowResize);
+
+            // 渲染循环
+            animate();
+
+            // 初始化相机位置
+            updateCameraPosition();
+
+            // 初始化变换矩阵显示和矩阵标题
+            updateMatrixTitles();
+            updateTransformationMatrices();
+        }
+
+        // 更新矩阵标题，使用当前标签值
+        function updateMatrixTitles() {
+            const axis1Name = axis1State.label;
+            const axis2Name = axis2State.label;
+
+            document.getElementById('matrix1-to-2-title').textContent =
+                `${axis1Name} 到 ${axis2Name} 的变换矩阵:`;
+
+            document.getElementById('matrix2-to-1-title').textContent =
+                `${axis2Name} 到 ${axis1Name} 的变换矩阵:`;
+        }
+
+        // 复制到剪贴板功能
+        function copyToClipboard(elementId) {
+            const text = document.getElementById(elementId).textContent;
+            navigator.clipboard.writeText(text).then(
+                function() {
+                    alert('矩阵已复制到剪贴板');
+                },
+                function(err) {
+                    console.error('无法复制: ', err);
+                    alert('复制失败，请手动选择并复制');
+                }
+            );
+        }
+
+        // 为坐标轴创建文本标签，字体改为108px
+        function createTextLabels() {
+            const canvas1 = document.createElement('canvas');
+            const context1 = canvas1.getContext('2d');
+            canvas1.width = 512; // 增大画布尺寸以容纳更大的字体
+            canvas1.height = 256;
+
+            context1.fillStyle = '#1890ff';
+            context1.font = 'Bold 108px Arial'; // 增大字体
+            context1.fillText(axis1State.label, 10, 150);
+
+            const texture1 = new THREE.CanvasTexture(canvas1);
+            const material1 = new THREE.SpriteMaterial({ map: texture1 });
+            axis1Label = new THREE.Sprite(material1);
+            axis1Label.scale.set(2, 1, 1);
+            axis1Label.position.set(0, -0.7, 0); // 调整位置，远离原点
+            axis1Group.add(axis1Label);
+
+            const canvas2 = document.createElement('canvas');
+            const context2 = canvas2.getContext('2d');
+            canvas2.width = 512;
+            canvas2.height = 256;
+
+            context2.fillStyle = '#52c41a';
+            context2.font = 'Bold 108px Arial'; // 增大字体
+            context2.fillText(axis2State.label, 10, 150);
+
+            const texture2 = new THREE.CanvasTexture(canvas2);
+            const material2 = new THREE.SpriteMaterial({ map: texture2 });
+            axis2Label = new THREE.Sprite(material2);
+            axis2Label.scale.set(2, 1, 1);
+            axis2Label.position.set(0, -0.7, 0); // 调整位置，远离原点
+            axis2Group.add(axis2Label);
+        }
+
+        // 更新文本标签，保持108px的字体大小
+        function updateTextLabel(labelObject, text, color) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 512;
+            canvas.height = 256;
+
+            context.fillStyle = color;
+            context.font = 'Bold 108px Arial'; // 保持字体大小
+            context.fillText(text, 10, 150);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            labelObject.material.map = texture;
+            labelObject.material.map.needsUpdate = true;
+        }
+
+        // 创建自定义坐标轴（标准右手坐标系）
+        function createCustomAxes(length, color = 0xffffff) {
+            const axesGroup = new THREE.Group();
+
+            // 创建坐标轴，增加线宽和头部尺寸
+            // X轴 (红色)
+            const xAxis = new THREE.ArrowHelper(
+                new THREE.Vector3(1, 0, 0),
+                new THREE.Vector3(0, 0, 0),
+                length,
+                0xff0000,
+                length * 0.1,  // 增大箭头头部
+                length * 0.2   // 增大头部宽度
+            );
+
+            // Y轴 (绿色)
+            const yAxis = new THREE.ArrowHelper(
+                new THREE.Vector3(0, 1, 0),
+                new THREE.Vector3(0, 0, 0),
+                length,
+                0x00ff00,
+                length * 0.2,
+                length * 0.1
+            );
+
+            // Z轴 (蓝色)
+            const zAxis = new THREE.ArrowHelper(
+                new THREE.Vector3(0, 0, 1),
+                new THREE.Vector3(0, 0, 0),
+                length,
+                0x0000ff,
+                length * 0.2,
+                length * 0.1
+            );
+
+            // 增加线宽
+            xAxis.line.material.linewidth = 5;
+            yAxis.line.material.linewidth = 5;
+            zAxis.line.material.linewidth = 5;
+
+            axesGroup.add(xAxis);
+            axesGroup.add(yAxis);
+            axesGroup.add(zAxis);
+
+            return axesGroup;
+        }
+
+        // 设置控制监听器
+        function setupControlListeners() {
+            // 相机角度控制
+            const cameraAngleSlider = document.getElementById('camera-angle');
+            cameraAngleSlider.addEventListener('input', updateCameraPosition);
+            cameraAngleSlider.addEventListener('dblclick', function() {
+                resetSlider(this, 'camera-angle-value');
+                updateCameraPosition();
+            });
+
+            // 第一个坐标轴的控制
+            setupSliderWithReset('axis1-x', function() {
+                updateAxis1();
+                updateTransformationMatrices();
+            });
+            setupSliderWithReset('axis1-y', function() {
+                updateAxis1();
+                updateTransformationMatrices();
+            });
+            setupSliderWithReset('axis1-z', function() {
+                updateAxis1();
+                updateTransformationMatrices();
+            });
+            setupSliderWithReset('axis1-roll', function() {
+                updateAxis1();
+                updateTransformationMatrices();
+            });
+            setupSliderWithReset('axis1-pitch', function() {
+                updateAxis1();
+                updateTransformationMatrices();
+            });
+            setupSliderWithReset('axis1-yaw', function() {
+                updateAxis1();
+                updateTransformationMatrices();
+            });
+
+            document.getElementById('axis1-label').addEventListener('input', function() {
+                updateAxis1Label();
+                updateMatrixTitles();
+            });
+
+            // 第二个坐标轴的控制
+            setupSliderWithReset('axis2-x', function() {
+                updateAxis2();
+                updateTransformationMatrices();
+            });
+            setupSliderWithReset('axis2-y', function() {
+                updateAxis2();
+                updateTransformationMatrices();
+            });
+            setupSliderWithReset('axis2-z', function() {
+                updateAxis2();
+                updateTransformationMatrices();
+            });
+            setupSliderWithReset('axis2-roll', function() {
+                updateAxis2();
+                updateTransformationMatrices();
+            });
+            setupSliderWithReset('axis2-pitch', function() {
+                updateAxis2();
+                updateTransformationMatrices();
+            });
+            setupSliderWithReset('axis2-yaw', function() {
+                updateAxis2();
+                updateTransformationMatrices();
+            });
+
+            document.getElementById('axis2-label').addEventListener('input', function() {
+                updateAxis2Label();
+                updateMatrixTitles();
+            });
+        }
+
+        // 设置带有双击重置功能的滑块
+        function setupSliderWithReset(sliderId, updateFunction) {
+            const slider = document.getElementById(sliderId);
+            slider.addEventListener('input', updateFunction);
+            slider.addEventListener('dblclick', function() {
+                resetSlider(this, sliderId + '-value');
+                updateFunction();
+            });
+        }
+
+        // 重置滑块到0
+        function resetSlider(slider, valueId) {
+            slider.value = 0;
+            document.getElementById(valueId).textContent = '0.0';
+        }
+
+        // 更新相机位置
+        function updateCameraPosition() {
+            cameraAngle = parseFloat(document.getElementById('camera-angle').value);
+            document.getElementById('camera-angle-value').textContent = cameraAngle.toFixed(2);
+
+            // 设置相机位置 (保持距离固定，只改变角度)
+            const cameraDistance = 5;
+            camera.position.x = cameraDistance * Math.sin(cameraAngle);
+            camera.position.y = -cameraDistance * Math.cos(cameraAngle);
+            camera.position.z = 4; // 保持相机高度固定
+            // camera.position.x = cameraDistance * Math.sin(cameraAngle);
+            // camera.position.y = -cameraDistance * Math.cos(cameraAngle);
+            // camera.position.z = 5; // 保持相机高度固定
+            camera.lookAt(0, 0, 0);
+        }
+
+        // 更新第一个坐标轴标签
+        function updateAxis1Label() {
+            axis1State.label = document.getElementById('axis1-label').value;
+            updateTextLabel(axis1Label, axis1State.label, '#1890ff');
+        }
+
+        // 更新第二个坐标轴标签
+        function updateAxis2Label() {
+            axis2State.label = document.getElementById('axis2-label').value;
+            updateTextLabel(axis2Label, axis2State.label, '#52c41a');
+        }
+
+        // 更新第一个坐标轴
+        function updateAxis1() {
+            // 获取滑块值
+            axis1State.x = parseFloat(document.getElementById('axis1-x').value);
+            axis1State.y = parseFloat(document.getElementById('axis1-y').value);
+            axis1State.z = parseFloat(document.getElementById('axis1-z').value);
+            axis1State.roll = parseFloat(document.getElementById('axis1-roll').value);
+            axis1State.pitch = parseFloat(document.getElementById('axis1-pitch').value);
+            axis1State.yaw = parseFloat(document.getElementById('axis1-yaw').value);
+
+            // 更新显示的值
+            document.getElementById('axis1-x-value').textContent = axis1State.x.toFixed(1);
+            document.getElementById('axis1-y-value').textContent = axis1State.y.toFixed(1);
+            document.getElementById('axis1-z-value').textContent = axis1State.z.toFixed(1);
+            document.getElementById('axis1-roll-value').textContent = axis1State.roll.toFixed(2);
+            document.getElementById('axis1-pitch-value').textContent = axis1State.pitch.toFixed(2);
+            document.getElementById('axis1-yaw-value').textContent = axis1State.yaw.toFixed(2);
+
+            // 更新坐标轴位置
+            axis1Group.position.set(axis1State.x, axis1State.y, axis1State.z);
+
+            // 重置旋转
+            axis1Group.rotation.set(0, 0, 0);
+
+            // 正确应用欧拉角旋转
+            const euler = new THREE.Euler(
+                axis1State.roll,  // 横滚角 - 绕X轴
+                axis1State.pitch, // 俯仰角 - 绕Y轴
+                axis1State.yaw,   // 偏航角 - 绕Z轴
+                'ZYX'            // 旋转顺序: Z-Y-X
+            );
+
+            axis1Group.setRotationFromEuler(euler);
+        }
+
+        // 更新第二个坐标轴
+        function updateAxis2() {
+            // 获取滑块值
+            axis2State.x = parseFloat(document.getElementById('axis2-x').value);
+            axis2State.y = parseFloat(document.getElementById('axis2-y').value);
+            axis2State.z = parseFloat(document.getElementById('axis2-z').value);
+            axis2State.roll = parseFloat(document.getElementById('axis2-roll').value);
+            axis2State.pitch = parseFloat(document.getElementById('axis2-pitch').value);
+            axis2State.yaw = parseFloat(document.getElementById('axis2-yaw').value);
+
+            // 更新显示的值
+            document.getElementById('axis2-x-value').textContent = axis2State.x.toFixed(1);
+            document.getElementById('axis2-y-value').textContent = axis2State.y.toFixed(1);
+            document.getElementById('axis2-z-value').textContent = axis2State.z.toFixed(1);
+            document.getElementById('axis2-roll-value').textContent = axis2State.roll.toFixed(2);
+            document.getElementById('axis2-pitch-value').textContent = axis2State.pitch.toFixed(2);
+            document.getElementById('axis2-yaw-value').textContent = axis2State.yaw.toFixed(2);
+
+            // 更新坐标轴位置
+            axis2Group.position.set(axis2State.x, axis2State.y, axis2State.z);
+
+            // 重置旋转
+            axis2Group.rotation.set(0, 0, 0);
+
+            // 正确应用欧拉角旋转
+            const euler = new THREE.Euler(
+                axis2State.roll,  // 横滚角 - 绕X轴
+                axis2State.pitch, // 俯仰角 - 绕Y轴
+                axis2State.yaw,   // 偏航角 - 绕Z轴
+                'ZYX'            // 旋转顺序: Z-Y-X
+            );
+
+            axis2Group.setRotationFromEuler(euler);
+        }
+
+        // 更新坐标轴间的相对变换矩阵
+        function updateTransformationMatrices() {
+            // 获取坐标轴1的世界矩阵
+            axis1Group.updateMatrixWorld();
+            const axis1Matrix = axis1Group.matrixWorld.clone();
+
+            // 获取坐标轴2的世界矩阵
+            axis2Group.updateMatrixWorld();
+            const axis2Matrix = axis2Group.matrixWorld.clone();
+
+            // 计算从坐标轴1到坐标轴2的变换矩阵
+            // T_1_to_2 = T_2^(-1) * T_1
+            const axis1ToAxis2 = new THREE.Matrix4();
+            const axis2MatrixInverse = new THREE.Matrix4().copy(axis2Matrix).invert();
+            axis1ToAxis2.multiplyMatrices(axis2MatrixInverse, axis1Matrix);
+
+            // 计算从坐标轴2到坐标轴1的变换矩阵
+            // T_2_to_1 = T_1^(-1) * T_2
+            const axis2ToAxis1 = new THREE.Matrix4();
+            const axis1MatrixInverse = new THREE.Matrix4().copy(axis1Matrix).invert();
+            axis2ToAxis1.multiplyMatrices(axis1MatrixInverse, axis2Matrix);
+
+            // 格式化矩阵以便于显示，使用Python列表格式
+            document.getElementById('axis1-to-axis2').textContent = formatMatrixAsPythonList(axis1ToAxis2);
+            document.getElementById('axis2-to-axis1').textContent = formatMatrixAsPythonList(axis2ToAxis1);
+        }
+
+        // 格式化4x4矩阵为Python列表格式的字符串
+        function formatMatrixAsPythonList(matrix) {
+            const e = matrix.elements;
+            let result = '[\n';
+
+            // Three.js存储矩阵为列优先，我们需要按行格式化
+            for (let i = 0; i < 4; i++) {
+                result += '    [';
+                for (let j = 0; j < 4; j++) {
+                    // 按行访问需要计算索引
+                    const value = e[j * 4 + i];
+                    result += value.toFixed(6);
+                    if (j < 3) {
+                        result += ', ';
+                    }
+                }
+                result += ']';
+                if (i < 3) {
+                    result += ',\n';
+                }
+            }
+            result += '\n]';
+
+            return result;
+        }
+
+        // 窗口大小调整
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / (window.innerHeight * 0.7);
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight * 0.7);
+        }
+
+        // 动画循环
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        // 启动应用
+        init();
+    </script>
+</body>
+</html>
